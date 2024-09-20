@@ -1,0 +1,162 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Grade</title>
+    <link href="{% static 'css/styles.css' %}" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+    <style>
+        @keyframes underlineCycle {
+            0% {
+                text-decoration-color: red;
+            }
+            25% {
+                text-decoration-color: orange;
+            }
+            50% {
+                text-decoration-color: yellow;
+            }
+            75% {
+                text-decoration-color: green;
+            }
+            100% {
+                text-decoration-color: blue;
+            }
+        }
+
+        .underline-cycling {
+            position: relative;
+            display: inline-block;
+            text-decoration: none; 
+        }
+
+        .underline-cycling::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: -8px; 
+            height: 10px; 
+            width: 100%;
+            background: linear-gradient(90deg, red, orange, yellow, green, blue, red);
+            background-size: 200% 100%;
+            background-position: 100% 0;
+            animation: underlineCycle 3s linear infinite;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content {
+            flex: 1;
+        }
+    </style>
+</head>
+<body class="bg-blue-300 flex flex-col min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-blue-200 p-4 border-b-4 border-blue-300">
+        <div class="container mx-auto flex justify-between items-center px-4">
+            <a href="{% url 'home' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700 underline-cycling">LearningSmart</a>
+            <div class="space-x-4">
+                {% if user.is_authenticated %}
+                <a href="{% url 'logout' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700">Logout</a>
+                {% else %}
+                    <a href="{% url 'login' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700">Login</a>
+                    <a href="{% url 'signup' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700">Sign Up</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="mb-4">
+        <a href="{% url 'select_school_level' %}" class="text-blue-500 font-semibold hover:text-gray-700 inline-flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            Back
+        </a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-grow container mx-auto mt-10 flex items-center justify-center">
+        <div class="w-full max-w-md bg-white p-6 rounded-lg shadow-lg">
+            <h1 class="text-2xl font-bold mb-4">Select Grade</h1>
+            <form method="post" action="">
+                {% csrf_token %}
+                <label for="grade" class="block text-gray-700 mb-2">Choose a grade:</label>
+                <select name="grade" id="grade" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4">
+                    <option value="select">Select</option>
+                    {% for grade in grades %}
+                        <option value="{{ grade.id }}">{{ grade.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">Submit</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer Section -->
+    <footer class="bg-gray-800 text-white py-12">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div>
+                    <h3 class="text-white text-xl mb-4 font-semibold">Quick Links</h3>
+                    <div class="space-y-2">
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>Home
+                        </a>
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>Login
+                        </a>
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>SignUp
+                        </a>
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>Latest Blog
+                        </a>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-white text-xl mb-4 font-semibold">Get In Touch</h3>
+                    <p class="mb-2 flex items-center"><i class="fas fa-envelope text-blue-400 mr-2"></i>info@example.com</p>
+                    <p class="flex items-center"><i class="fas fa-phone text-blue-400 mr-2"></i>+000 000 0000</p>
+                </div>
+                
+                <div>
+                    <h3 class="text-white text-xl mb-4 font-semibold">Follow Us</h3>
+                    <div class="flex space-x-4">
+                        <a class="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition" href="#">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a class="bg-blue-600 text-white rounded-full p-3 hover:bg-blue-700 transition" href="#">
+                            <i class="fab fa-facebook-f"></i>
+                        </a>
+                        <a class="bg-blue-700 text-white rounded-full p-3 hover:bg-blue-800 transition" href="#">
+                            <i class="fab fa-linkedin-in"></i>
+                        </a>
+                        <a class="bg-pink-500 text-white rounded-full p-3 hover:bg-pink-600 transition" href="#">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bottom Section -->
+    <div class="bg-gray-900 text-white py-4">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <p class="mb-2 md:mb-0">&copy; <a class="text-white border-b border-white hover:border-transparent" href="#">Your Site Name</a>. All Rights Reserved.</p>
+                <p class="mb-0">Designed by <a class="text-white border-b border-white hover:border-transparent" href="#">Pule</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

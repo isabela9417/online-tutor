@@ -1,0 +1,263 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ask Question</title>
+    <link href="{% static 'css/styles.css' %}" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+    <style>
+        @keyframes underlineCycle {
+            0% { text-decoration-color: red; }
+            25% { text-decoration-color: orange; }
+            50% { text-decoration-color: yellow; }
+            75% { text-decoration-color: green; }
+            100% { text-decoration-color: blue; }
+        }
+
+        .underline-cycling {
+            position: relative;
+            display: inline-block;
+            text-decoration: none; 
+        }
+
+        .underline-cycling::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: -8px; 
+            height: 10px; 
+            width: 100%;
+            background: linear-gradient(90deg, red, orange, yellow, green, blue, red);
+            background-size: 200% 100%;
+            background-position: 100% 0;
+            animation: underlineCycle 3s linear infinite;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content {
+            flex: 1; /* This makes the content area grow to fill available space */
+        }
+
+        footer {
+            flex-shrink: 0; /* Prevent the footer from shrinking */
+        }
+    </style>
+</head>
+<body class="bg-blue-300 flex flex-col min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-blue-200 p-4 border-b-4 border-blue-300">
+        <div class="container mx-auto flex justify-between items-center px-4">
+            <a href="{% url 'home' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700 underline-cycling">LearningSmart</a>
+            <div class="space-x-4">
+                {% if user.is_authenticated %}
+                    <a href="{% url 'logout' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700">Logout</a>
+                {% else %}
+                    <a href="{% url 'login' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700">Login</a>
+                    <a href="{% url 'signup' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700">Sign Up</a>
+                {% endif %}
+                <a href="{% url 'ask_question' %}" class="text-blue-500 text-lg font-semibold hover:text-gray-700">Tutor-Me</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="mb-4">
+        <a href="{% url 'select_subject' %}" class="text-blue-500 font-semibold hover:text-gray-700 inline-flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            Back
+        </a>
+    </div>
+
+    <div class="content flex flex-col flex-grow"> <!-- Added content class for flexibility -->
+        <div class="flex flex-grow">
+            <!-- Sidebar for topic selection -->
+            <div class="w-1/4 p-4 bg-gray-100 border-r border-gray-300"> <!-- Fixed width for sidebar -->
+                <form method="post" action="">
+                    {% csrf_token %}
+                    <label for="topic" class="block text-lg font-medium mb-2">Select a topic:</label>
+                    <select name="topic" id="topic" class="form-select block w-full mb-4">
+                        <option value="">Select</option>
+                        <!-- Topics will be populated here based on the subject -->
+                    </select>
+        
+                    <button type="submit" class="mt-4 px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700">Submit</button>
+                </form>
+            </div>
+            
+            <!-- Main content area -->
+            <div class="flex-grow flex flex-col p-4">
+                <div class="flex-grow flex items-center justify-start">
+                    <div class="bg-gray-300 items-start shadow-lg rounded-lg w-full p-6 h-full">
+                        <div class="mt-4 flex flex-col h-full">
+                            <h2 class="text-xl font-semibold mt-4">Read the Passage to Learn:</h2>
+                            <div class="mt-2 bg-gray-50 p-4 rounded-md border border-gray-200 flex-grow max-h-5xl overflow-y-auto">
+                                <p>{{ answer }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Hard-coded topics based on subject ID stored in session
+        const topics = {
+            '1': [ // Subject ID 1
+                { id: 'nouns', name: 'Nouns' },
+                { id: 'verbs', name: 'Verbs' },
+                { id: 'grammar', name: 'Grammar' },
+                { id: 'punctuation', name: 'Punctuation' },
+                { id: 'Phonics & Spelling', name: 'Phonics & Spelling' },
+                { id: 'Handwriting and Writing', name: 'Handwriting and Writing' },
+            ],
+            '2': [ // Subject ID 2
+                { id: 'shapes', name: 'Using Shapes' },
+                { id: 'Count to 100', name: 'Count to 100' },
+                { id: 'Add and subtract 2-digit numbers', name: 'Add and subtract 2-digit numbers' },
+                { id: 'Represent numbers on a number line', name: 'Represent numbers on a number line' },
+                { id: 'Write the date; tell time; read a calendar', name: 'Write the date; tell time; read a calendar' },
+                { id: 'Identify, sort and classify 2-dimensional shapes', name: 'Identify, sort and classify 2-dimensional shapes' },
+            ],
+            '4': [ // Subject ID 4
+                { id: 'Homophones', name: 'Homophones' },
+                { id: 'Homographs', name: 'Homographs' },
+                { id: 'Literary terms', name: 'Literary terms' },
+                { id: 'Parts of speech', name: 'Parts of speech' },
+                { id: 'Reading comprehension', name: 'Reading comprehension' },
+                { id: 'Language and vocabulary', name: 'Language and vocabulary' },
+                { id: 'Parts of speech and usage', name: 'Parts of speech and usage' },
+                { id: 'Vocabulary skilss and word usage', name: 'Vocabulary skilss and word usage' },
+                { id: 'Punctuation and sentence structure', name: 'Punctuation and sentence structure' },
+                { id: 'Plural Noun Definiton, Rules and Examples', name: 'Plural Noun Definiton, Rules and Examples' },
+            ],
+            '5': [ // Subject ID 5
+                { id: 'Numbers, Operations and relationships', name: 'Numbers, Operations and relationships' },
+                { id: 'Patterns, Functions and algebra', name: 'Patterns, Functions and algebra' },
+                { id: 'Measurements', name: 'Measurements' },
+                { id: 'Space and shape (geometry)', name: 'Space and shape (geometry)' },
+                { id: 'Numbers Systems', name: 'Numbers Systems' },
+                { id: 'Data Handling', name: 'Data Handling' },
+                { id: 'Fractions and their Types', name: 'Fractions and their Types' },
+                { id: 'Arithmetic Operations', name: 'Arithmetic Operations' },
+            ],
+            '6': [ // Subject ID 6
+                { id: 'Atmosphere', name: ' Atmosphere' },
+                { id: 'Periodic Table', name: ' Periodic Table' },
+                { id: 'Energy & Change', name: 'Energy & Change' },
+                { id: 'Matter & Materials', name: 'Matter & Materials' },
+                { id: 'Formulae & equations', name: 'Formulae & equations' },
+                { id: 'Lithosphere & Mining', name: 'Lithosphere & Mining' },
+                { id: 'Plant & animal cells.', name: 'Plant & animal cells.' },
+                { id: 'Human systems', name: 'Patterns, Functions and algebra' },
+            ],
+            '7': [ // Subject ID 7
+                { id: 'Trade', name: 'Trade' },
+                { id: 'Weather', name: 'Weather' },
+                { id: 'Population', name: 'Population' },
+                { id: 'Food and farming', name: 'Food and farming' },
+                { id: 'Minerals and mining', name: 'Minerals and mining' },
+                { id: 'Climate and vegetation', name: 'Climate and vegetation' },
+                { id: 'continents and countries', name: 'continents and countries' },
+                { id: 'Democracy and citizenship', name: 'Democracy and citizenship' },
+                { id: 'Hunter gatheres and herders', name: 'Hunter gatheres and herders' },
+                { id: 'African kingdom: Mapungubwe', name: 'African kingdom: Mapungubwe' },
+                { id: 'Heritage trail of our provinces', name: 'Heritage trail of our provinces' },
+                { id: 'Reading and interpreting various types of maps', name: 'Reading and interpreting various types of maps' },
+            ],
+            '10': [ // Subject ID 10
+                { id: 'Equations', name: 'Equations' },
+                { id: 'Expressions', name: 'Expressions' },
+                { id: 'Whole numbers', name: 'Whole numbers' },
+                { id: 'Geometry of 2-D shapes', name: 'Geometry of 2-D shapes' },
+                { id: 'decimals and fractions', name: 'decimals and fractions' },
+                { id: 'Constructing geometric objects', name: 'Constructing geometric objects' },
+                { id: 'Rational and irrational numbers', name: 'Rational and irrational numbers' },
+                { id: 'Exponents (squares, cubes and roots)', name: 'Exponents (squares, cubes and roots)' },
+            ],
+            // Add more subjects and their corresponding topics here
+        };
+        
+        // Get the subject ID from session storage (or pass it from the server if needed)
+        const subjectId = '{{ request.session.subject_id }}'; // Ensure this value is available
+        
+        // Populate topics based on selected subject
+        const topicSelect = document.getElementById('topic');
+        if (topics[subjectId]) {
+            topics[subjectId].forEach(topic => {
+                const option = document.createElement('option');
+                option.value = topic.id;
+                option.textContent = topic.name;
+                topicSelect.appendChild(option);
+            });
+        }
+    </script>
+    
+    <!-- Footer Section -->
+    <footer class="bg-gray-800 text-white py-12">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div>
+                    <h3 class="text-white text-xl mb-4 font-semibold">Quick Links</h3>
+                    <div class="space-y-2">
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>Home
+                        </a>
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>Login
+                        </a>
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>SignUp
+                        </a>
+                        <a class="text-gray-400 hover:text-gray-300 flex items-center" href="#">
+                            <i class="fas fa-arrow-right text-blue-400 mr-2"></i>Latest Blog
+                        </a>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-white text-xl mb-4 font-semibold">Get In Touch</h3>
+                    <p class="mb-2 flex items-center"><i class="fas fa-envelope text-blue-400 mr-2"></i>info@example.com</p>
+                    <p class="flex items-center"><i class="fas fa-phone text-blue-400 mr-2"></i>+000 000 0000</p>
+                </div>
+                
+                <div>
+                    <h3 class="text-white text-xl mb-4 font-semibold">Follow Us</h3>
+                    <div class="flex space-x-4">
+                        <a class="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition" href="#">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a class="bg-blue-600 text-white rounded-full p-3 hover:bg-blue-700 transition" href="#">
+                            <i class="fab fa-facebook-f"></i>
+                        </a>
+                        <a class="bg-blue-700 text-white rounded-full p-3 hover:bg-blue-800 transition" href="#">
+                            <i class="fab fa-linkedin-in"></i>
+                        </a>
+                        <a class="bg-pink-500 text-white rounded-full p-3 hover:bg-pink-600 transition" href="#">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Bottom Section -->
+    <div class="bg-gray-900 text-white py-4">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <p class="mb-2 md:mb-0">&copy; <a class="text-white border-b border-white hover:border-transparent" href="#">Your Site Name</a>. All Rights Reserved.</p>
+                <p class="mb-0">Designed by <a class="text-white border-b border-white hover:border-transparent" href="#">Pule</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
