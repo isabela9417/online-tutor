@@ -6,21 +6,41 @@ from django.http import HttpResponse
 import random
 from django.contrib import messages
 from django.contrib.auth.models import User
-from django.shortcuts import render
 from django.http import HttpResponse
 from groq import Groq
 import os
+from dotenv import load_dotenv 
 from django.conf import settings
 import time
 from django.http import HttpResponseBadRequest
 from googleapiclient.discovery import build
+from .forms import DocumentUploadForm
+from PIL import Image
+import pytesseract
+from docx import Document
+import pypdf
+import os
+# from openai.error import RateLimitError
+from langchain.docstore.document import Document
+from langchain.document_loaders import TextLoader
+from langchain.docstore.document import Document
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
+from openai import OpenAIError
+from langchain.vectorstores import FAISS
+from langchain.chains import RetrievalQA
+from langchain.schema import Document
 
 client = Groq(api_key=settings.GROQ_API_KEY)
-
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 youtube = build('youtube', 'v3', developerKey=settings.YOUTUBE_API_KEY)\
 
 def home(request):
     return render(request, 'home.html')
+
+def upload_assignment(request):
+    return render(request, 'upload_assignment.html')
 
 def login_view(request):
     if request.method == 'POST':
@@ -83,6 +103,7 @@ def select_subject(request):
     subjects = Subject.objects.filter(grade_id=grade_id)
     return render(request, 'select_subject.html', {'subjects': subjects})
 
+
 @login_required
 def generate_quiz(request):
     question_id = request.session.get('question_id')
@@ -124,6 +145,131 @@ def fetch_youtube_video(query):
         print(f"Error fetching YouTube video: {e}")
     
     return ""
+
+# reading documents
+def read_document(file_path, file_name):
+    """
+    Reads the content of a document based on its file type.
+    """
+    if file_name.lower().endswith(('.pdf')):
+        return read_pdf(file_path)
+    elif file_name.lower().endswith(('.docx', '.doc')):
+        return read_word(file_path)
+    elif file_name.lower().endswith(('.jpg', '.jpeg', '.png')):
+        return read_image(file_path)
+    else:
+        return "Unsupported file type."
+
+def read_pdf(file_path):
+    """
+    Reads text from a PDF file using pypdf.
+    """
+    try:
+        with open(file_path, 'rb') as pdf_file:
+            pdf_reader = pypdf.PdfReader(pdf_file)
+            text = ''
+            for page in pdf_reader.pages:
+                text += page.extract_text()
+            return text
+    except Exception as e:
+        print(f"Error reading PDF: {e}")
+        return "Error reading PDF."
+
+def read_word(file_path):
+    """
+    Reads text from a Word document using docx.
+    """
+    try:
+        doc = Document(file_path)
+        text = ''
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + '\n'
+        return text
+    except Exception as e:
+        print(f"Error reading Word document: {e}")
+        return "Error reading Word document."
+
+def read_image(file_path):
+    """
+    Reads text from an image using pytesseract.
+    """
+    try:
+        image = Image.open(file_path)
+        text = pytesseract.image_to_string(image)
+        return text
+    except Exception as e:
+        print(f"Error reading image: {e}")
+        return "Error reading image."
+
+@login_required
+def upload_document(request):
+    answer = ""
+    video_url = ""
+    document_content = ""
+
+    if request.method == 'POST':
+        uploaded_file = request.FILES.get('document')
+
+        if uploaded_file:
+            documents_dir = os.path.join(settings.MEDIA_ROOT, 'documents')
+            os.makedirs(documents_dir, exist_ok=True)
+            file_path = os.path.join(documents_dir, uploaded_file.name)
+
+            # Save the file
+            with open(file_path, 'wb+') as destination:
+                for chunk in uploaded_file.chunks():
+                    destination.write(chunk)
+
+            # Read the document based on file type
+            document_content = read_document(file_path, uploaded_file.name)
+            print("Extracted Document Content:", document_content)
+
+            # Check if document_content is valid
+            if not document_content:
+                document_content = "No content extracted from the document."
+
+            # Prepare the context for the model
+            context = (
+                f"You are an assistant for a school system. "
+                f"Provide a detailed, step-by-step guide on how to solve the questions in the following document: {document_content}. "
+                f"You can also include any relevant information."
+            )
+
+            # Generate answer using the model
+            start = time.process_time()
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
+                    {"role": "user", "content": context}
+                ],
+                model="llama3-8b-8192",
+                temperature=0.5,
+                max_tokens=1024,
+                top_p=1,
+                stop=None,
+                stream=False,
+            )
+            answer = chat_completion.choices[0].message.content
+            end = time.process_time()
+            print(f"Processing time: {end - start} seconds")
+
+            # Fetch the video URL based on the document content
+            video_query = f"questions from document"
+            video_url = fetch_youtube_video(video_query)
+            video_url = video_url.replace('watch?v=', 'embed/')
+
+            # Clean up: Optionally remove the file after processing
+            os.remove(file_path)
+        else:
+            answer = "No document was uploaded."
+
+    return render(request, 'upload_document.html', {
+        'answer': answer,
+        'video_url': video_url,
+        'question': document_content,
+    })
+
+
 
 @login_required
 def ask_question(request):
@@ -168,8 +314,6 @@ def ask_question(request):
             end = time.process_time()
             print(f"Processing time: {end - start} seconds")
 
-            # Removed the validity check for the answer
-            # Simply allow any generated answer to be returned
 
             # Fetch the video URL based on the question
             video_query = f"{question}"
@@ -179,6 +323,7 @@ def ask_question(request):
             answer = "No question was submitted."
     
     return render(request, 'ask_question.html', {'question': question, 'answer': answer, 'video_url': video_url})
+
 
 @login_required
 def generate_content(request):
@@ -195,9 +340,9 @@ def generate_content(request):
     topic = ""
 
     if request.method == "POST":
-        selected_topic = request.POST.get("topic")  # Focus only on the selected topic
+        selected_topic = request.POST.get("topic")
 
-        if selected_topic:  # Ensure that a topic is provided
+        if selected_topic:
             context = (
                 f"You are an assistant for a school system. "
                 f"The current school level is '{selected_level}', "
@@ -233,13 +378,10 @@ def generate_content(request):
     return render(request, 'generate_content.html', {'answer': answer, 'video_url': video_url})
 
 
-
 def is_valid_answer(answer, selected_level, grade_name, subject_name):
     if selected_level in answer and grade_name in answer and subject_name in answer:
         return True
     return False
-
-
 
 
 def is_valid_answer(answer, selected_level, grade_id, subject_id):
@@ -256,3 +398,21 @@ def is_valid_answer(answer, selected_level, grade_id, subject_id):
         return True
 
     return False
+
+
+def generate_questions(document_text):
+    response = requests.post(
+        'https://api.groq.com/generate-questions',
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer client',
+        },
+        json={'text': document_text}
+    )
+    try:
+        questions = generate_questions(document_text)
+    except Exception as e:
+        print(f"Error generating questions: {e}")
+
+    return response.json().get('questions', [])
+

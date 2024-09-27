@@ -14,4 +14,5 @@ urlpatterns = [
     path('rate_performance/', views.rate_performance, name='rate_performance'),
     path('select_school_level/', views.select_school_level, name='select_school_level'),
     path('generate_content/', views.generate_content, name='generate_content'),
+    path('upload_assignment/', views.upload_assignment, name='upload_assignment'),
 ]
