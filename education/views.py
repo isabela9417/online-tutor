@@ -19,11 +19,14 @@ from PIL import Image
 import pytesseract
 from docx import Document
 import pypdf
-import os
+from gtts import gTTS
+from playsound import playsound
+import pyttsx3
+import threading
+import pythoncom
 # from openai.error import RateLimitError
 from langchain.docstore.document import Document
 from langchain.document_loaders import TextLoader
-from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
@@ -200,12 +203,31 @@ def read_text(file_path):
         return "Error reading text file."
 
 
+# Assuming you have some client for chat completions
+# from your_chat_client import client  # Adjust this import according to your project
+
+def speak_text(text):
+    """Function to read text aloud and save it as an audio file using pyttsx3."""
+    pythoncom.CoInitialize()  # Initialize COM
+    engine = pyttsx3.init()
+    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'audio', 'output.mp3')
+    
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(audio_file_path), exist_ok=True)
+
+    engine.save_to_file(text, audio_file_path)
+    engine.runAndWait()
+    
+    return audio_file_path
+
+
 @login_required
 def ask_question(request):
     answer = ""
     video_url = ""
     document_content = ""
     question = ""
+    audio_file_url = ""
 
     if request.method == 'POST':
         # Handle document upload
@@ -230,27 +252,24 @@ def ask_question(request):
             if not document_content or "Error" in document_content:
                 document_content = "No content extracted from the document."
             else:
-                # Use the extracted content as the question
                 question = document_content
                 video_query = f"{question}"
                 video_url = fetch_youtube_video(video_query)
                 video_url = video_url.replace('watch?v=', 'embed/')
 
-            # Prepare context for the model using the document content (now treated as a question)
+            # Prepare context for the model without restrictions
             context = (
-                f"You are an assistant for a school system. "
-                f"Provide a detailed, step-by-step guide on how to solve the questions in the following document: {question}. "
-                f"You can also include any relevant information."
+                f"You are a helpful assistant. "
+                f"Provide a detailed, step-by-step guide on how to solve the following question or topic: {question}. "
+                f"Include any relevant information."
             )
 
             # Generate answer using the model
             start = time.process_time()
             try:
                 chat_completion = client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
-                        {"role": "user", "content": context}
-                    ],
+                    messages=[{"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
+                              {"role": "user", "content": context}],
                     model="llama3-8b-8192",
                     temperature=0.5,
                     max_tokens=1024,
@@ -265,51 +284,54 @@ def ask_question(request):
             end = time.process_time()
             print(f"Processing time for document: {end - start} seconds")
 
-            # Clean up: Optionally remove the file after processing
             os.remove(file_path)
 
-        # If a question is submitted
         elif question:
-            # Fetch values from the session (if necessary)
-            selected_level = request.session.get('selected_level', 'Unknown Level')
-            grade_id = request.session.get('grade_id', 'Unknown Grade')
-            subject_id = request.session.get('subject_id', 'Unknown Subject')
-
+            # Prepare context for the model without restrictions
             context = (
-                f"You are an assistant for a school system. "
-                f"The current school level is '{selected_level}', "
-                f"the grade is '{grade_id}', and the subject is '{subject_id}'. "
-                f"Provide a detailed, step-by-step guide on how to solve the following question: {question}. "
-                f"You can also include any relevant information."
+                f"You are a helpful assistant. "
+                f"Provide a detailed, step-by-step guide on how to solve the following question or topic: {question}. "
+                f"Include any relevant information."
             )
 
             start = time.process_time()
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
-                    {"role": "user", "content": context}
-                ],
-                model="llama3-8b-8192",
-                temperature=0.5,
-                max_tokens=1024,
-                top_p=1,
-                stop=None,
-                stream=False,
-            )
-            answer = chat_completion.choices[0].message.content
+            try:
+                chat_completion = client.chat.completions.create(
+                    messages=[{"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
+                              {"role": "user", "content": context}],
+                    model="llama3-8b-8192",
+                    temperature=0.5,
+                    max_tokens=1024,
+                    top_p=1,
+                    stop=None,
+                    stream=False,
+                )
+                answer = chat_completion.choices[0].message.content
+            except Exception as e:
+                print(f"Error generating answer: {e}")
+                answer = "Error generating answer."
             end = time.process_time()
             print(f"Processing time for question: {end - start} seconds")
 
-            # Fetch the video URL based on the question
             video_query = f"{question}"
             video_url = fetch_youtube_video(video_query)
             video_url = video_url.replace('watch?v=', 'embed/')
-        
-        # Handle case where neither document nor question was provided
+
         else:
             answer = "No document or question was submitted."
 
-    return render(request, 'ask_question.html', {'document_content': document_content, 'question': question, 'answer': answer, 'video_url': video_url})
+        # Generate audio file for the answer
+        if answer:
+            audio_file_url = speak_text(answer)  # Get the path of the generated audio file
+
+    return render(request, 'ask_question.html', {
+        'document_content': document_content,
+        'question': question,
+        'answer': answer,
+        'video_url': video_url,
+        'audio_file_url': f"{settings.MEDIA_URL}audio/output.mp3",  # Correctly reference the audio file
+        'MEDIA_URL': settings.MEDIA_URL,  # Add MEDIA_URL to the context
+    })
 
 
 @login_required
