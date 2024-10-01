@@ -146,53 +146,43 @@ def fetch_youtube_video(query):
     
     return ""
 
-# reading documents
+# Function to read the document
 def read_document(file_path, file_name):
-    """
-    Reads the content of a document based on its file type.
-    """
     if file_name.lower().endswith(('.pdf')):
         return read_pdf(file_path)
     elif file_name.lower().endswith(('.docx', '.doc')):
         return read_word(file_path)
     elif file_name.lower().endswith(('.jpg', '.jpeg', '.png')):
         return read_image(file_path)
+    elif file_name.lower().endswith(('.txt')):
+        return read_text(file_path)
+    elif file_name.lower().endswith(('.csv')):
+        return read_csv(file_path)
     else:
         return "Unsupported file type."
 
 def read_pdf(file_path):
-    """
-    Reads text from a PDF file using pypdf.
-    """
     try:
         with open(file_path, 'rb') as pdf_file:
             pdf_reader = pypdf.PdfReader(pdf_file)
             text = ''
             for page in pdf_reader.pages:
-                text += page.extract_text()
+                text += page.extract_text() or ''
             return text
     except Exception as e:
         print(f"Error reading PDF: {e}")
         return "Error reading PDF."
 
 def read_word(file_path):
-    """
-    Reads text from a Word document using docx.
-    """
     try:
         doc = Document(file_path)
-        text = ''
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + '\n'
+        text = '\n'.join(paragraph.text for paragraph in doc.paragraphs)
         return text
     except Exception as e:
         print(f"Error reading Word document: {e}")
         return "Error reading Word document."
 
 def read_image(file_path):
-    """
-    Reads text from an image using pytesseract.
-    """
     try:
         image = Image.open(file_path)
         text = pytesseract.image_to_string(image)
@@ -201,15 +191,28 @@ def read_image(file_path):
         print(f"Error reading image: {e}")
         return "Error reading image."
 
+def read_text(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return file.read()
+    except Exception as e:
+        print(f"Error reading text file: {e}")
+        return "Error reading text file."
+
+
 @login_required
-def upload_document(request):
+def ask_question(request):
     answer = ""
     video_url = ""
     document_content = ""
+    question = ""
 
     if request.method == 'POST':
+        # Handle document upload
         uploaded_file = request.FILES.get('document')
+        question = request.POST.get("question")
 
+        # If a document is uploaded
         if uploaded_file:
             documents_dir = os.path.join(settings.MEDIA_ROOT, 'documents')
             os.makedirs(documents_dir, exist_ok=True)
@@ -224,71 +227,54 @@ def upload_document(request):
             document_content = read_document(file_path, uploaded_file.name)
             print("Extracted Document Content:", document_content)
 
-            # Check if document_content is valid
-            if not document_content:
+            if not document_content or "Error" in document_content:
                 document_content = "No content extracted from the document."
+            else:
+                # Use the extracted content as the question
+                question = document_content
+                video_query = f"{question}"
+                video_url = fetch_youtube_video(video_query)
+                video_url = video_url.replace('watch?v=', 'embed/')
 
-            # Prepare the context for the model
+            # Prepare context for the model using the document content (now treated as a question)
             context = (
                 f"You are an assistant for a school system. "
-                f"Provide a detailed, step-by-step guide on how to solve the questions in the following document: {document_content}. "
+                f"Provide a detailed, step-by-step guide on how to solve the questions in the following document: {question}. "
                 f"You can also include any relevant information."
             )
 
             # Generate answer using the model
             start = time.process_time()
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
-                    {"role": "user", "content": context}
-                ],
-                model="llama3-8b-8192",
-                temperature=0.5,
-                max_tokens=1024,
-                top_p=1,
-                stop=None,
-                stream=False,
-            )
-            answer = chat_completion.choices[0].message.content
+            try:
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
+                        {"role": "user", "content": context}
+                    ],
+                    model="llama3-8b-8192",
+                    temperature=0.5,
+                    max_tokens=1024,
+                    top_p=1,
+                    stop=None,
+                    stream=False,
+                )
+                answer = chat_completion.choices[0].message.content
+            except Exception as e:
+                print(f"Error generating answer: {e}")
+                answer = "Error generating answer."
             end = time.process_time()
-            print(f"Processing time: {end - start} seconds")
-
-            # Fetch the video URL based on the document content
-            video_query = f"questions from document"
-            video_url = fetch_youtube_video(video_query)
-            video_url = video_url.replace('watch?v=', 'embed/')
+            print(f"Processing time for document: {end - start} seconds")
 
             # Clean up: Optionally remove the file after processing
             os.remove(file_path)
-        else:
-            answer = "No document was uploaded."
 
-    return render(request, 'upload_document.html', {
-        'answer': answer,
-        'video_url': video_url,
-        'question': document_content,
-    })
+        # If a question is submitted
+        elif question:
+            # Fetch values from the session (if necessary)
+            selected_level = request.session.get('selected_level', 'Unknown Level')
+            grade_id = request.session.get('grade_id', 'Unknown Grade')
+            subject_id = request.session.get('subject_id', 'Unknown Subject')
 
-
-
-@login_required
-def ask_question(request):
-    # Fetch values from the session
-    selected_level = request.session.get('selected_level', 'Unknown Level')
-    grade_name = request.session.get('grade_name', 'Unknown Grade')
-    subject_name = request.session.get('subject_name', 'Unknown Subject')
-    
-    grade_id = request.session.get('grade_id', 'Unknown Grade')
-    subject_id = request.session.get('subject_id', 'Unknown Subject')
-
-    answer = ""
-    question = ""
-    video_url = ""
-
-    if request.method == "POST":
-        question = request.POST.get("question")
-        
-        if question:
             context = (
                 f"You are an assistant for a school system. "
                 f"The current school level is '{selected_level}', "
@@ -296,7 +282,7 @@ def ask_question(request):
                 f"Provide a detailed, step-by-step guide on how to solve the following question: {question}. "
                 f"You can also include any relevant information."
             )
-            
+
             start = time.process_time()
             chat_completion = client.chat.completions.create(
                 messages=[
@@ -312,17 +298,18 @@ def ask_question(request):
             )
             answer = chat_completion.choices[0].message.content
             end = time.process_time()
-            print(f"Processing time: {end - start} seconds")
-
+            print(f"Processing time for question: {end - start} seconds")
 
             # Fetch the video URL based on the question
             video_query = f"{question}"
             video_url = fetch_youtube_video(video_query)
             video_url = video_url.replace('watch?v=', 'embed/')
+        
+        # Handle case where neither document nor question was provided
         else:
-            answer = "No question was submitted."
-    
-    return render(request, 'ask_question.html', {'question': question, 'answer': answer, 'video_url': video_url})
+            answer = "No document or question was submitted."
+
+    return render(request, 'ask_question.html', {'document_content': document_content, 'question': question, 'answer': answer, 'video_url': video_url})
 
 
 @login_required

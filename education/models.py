@@ -7,6 +7,9 @@ class Document(models.Model):
     uploaded_file = models.FileField(upload_to='documents/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+class images(models.Model):
+    uploaded_file = models.ImageField(upload_to='uploaded_images/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
 
 class Grade(models.Model):
     LEVEL_CHOICES = [
