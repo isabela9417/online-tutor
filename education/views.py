@@ -206,18 +206,22 @@ def read_text(file_path):
 # Assuming you have some client for chat completions
 # from your_chat_client import client  # Adjust this import according to your project
 
-def speak_text(text):
+def speak_text(text, filename):
     """Function to read text aloud and save it as an audio file using pyttsx3."""
     pythoncom.CoInitialize()  # Initialize COM
     engine = pyttsx3.init()
-    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'audio', 'output.mp3')
-    
+    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'audio', filename)
+
     # Create directory if it doesn't exist
     os.makedirs(os.path.dirname(audio_file_path), exist_ok=True)
 
-    engine.save_to_file(text, audio_file_path)
-    engine.runAndWait()
-    
+    try:
+        engine.save_to_file(text, audio_file_path)
+        engine.runAndWait()
+    except Exception as e:
+        print(f"Error saving audio file: {e}")
+        return None  # Return None if there's an error
+
     return audio_file_path
 
 
@@ -233,6 +237,9 @@ def ask_question(request):
         # Handle document upload
         uploaded_file = request.FILES.get('document')
         question = request.POST.get("question")
+
+        # Generate a unique filename based on the question or document content
+        audio_filename = f"audio_{int(time.time())}.mp3"
 
         # If a document is uploaded
         if uploaded_file:
@@ -322,16 +329,19 @@ def ask_question(request):
 
         # Generate audio file for the answer
         if answer:
-            audio_file_url = speak_text(answer)  # Get the path of the generated audio file
+            audio_file_path = speak_text(answer, audio_filename)  # Pass unique filename
+            if audio_file_path:
+                audio_file_url = f"{settings.MEDIA_URL}audio/{audio_filename}"  # Use the unique filename
 
     return render(request, 'ask_question.html', {
         'document_content': document_content,
         'question': question,
         'answer': answer,
         'video_url': video_url,
-        'audio_file_url': f"{settings.MEDIA_URL}audio/output.mp3",  # Correctly reference the audio file
+        'audio_file_url': audio_file_url,  # Correctly reference the audio file
         'MEDIA_URL': settings.MEDIA_URL,  # Add MEDIA_URL to the context
     })
+
 
 
 @login_required
@@ -340,16 +350,19 @@ def generate_content(request):
     selected_level = request.session.get('selected_level', 'Unknown Level')
     grade_name = request.session.get('grade_name', 'Unknown Grade')
     subject_name = request.session.get('subject_name', 'Unknown Subject')
-    
+
     grade_id = request.session.get('grade_id', 'Unknown Grade')
     subject_id = request.session.get('subject_id', 'Unknown Subject')
 
     answer = ""
     video_url = ""
-    topic = ""
+    audio_file_url = ""
 
     if request.method == "POST":
         selected_topic = request.POST.get("topic")
+
+        # Generate a unique filename for the audio
+        audio_filename = f"audio_{int(time.time())}.mp3"
 
         if selected_topic:
             context = (
@@ -377,6 +390,11 @@ def generate_content(request):
             end = time.process_time()
             print(f"Processing time: {end - start} seconds")
 
+            # Generate audio for the answer
+            audio_file_path = speak_text(answer, audio_filename)  # Pass unique filename
+            if audio_file_path:
+                audio_file_url = f"{settings.MEDIA_URL}audio/{audio_filename}"  # Use the unique filename
+
             # Fetch the video URL based on the topic
             video_query = selected_topic
             video_url = fetch_youtube_video(video_query)
@@ -384,7 +402,11 @@ def generate_content(request):
         else:
             answer = "No topic was submitted."
     
-    return render(request, 'generate_content.html', {'answer': answer, 'video_url': video_url})
+    return render(request, 'generate_content.html', {
+        'answer': answer,
+        'video_url': video_url,
+        'audio_file_url': audio_file_url,  # Pass the audio file URL to the template
+    })
 
 
 def is_valid_answer(answer, selected_level, grade_name, subject_name):

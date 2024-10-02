@@ -97,6 +97,13 @@
                 <div class="flex-grow flex items-center justify-start">
                     <div class="bg-gray-300 items-start shadow-lg rounded-lg w-full p-6 h-full">
                         <div class="mt-4 flex flex-col h-full">
+                            <h2 class="text-xl font-semibold">Read For Me:</h2>
+                            {% if audio_file_url %}
+                            <audio id="audioPlayer" class="mt-2" controls>
+                                <source src="{{ audio_file_url }}" type="audio/mp3">
+                                Your browser does not support the audio tag.
+                            </audio>           
+                            {% endif %}
                             <h2 class="text-xl font-semibold mt-4">Read the Passage to Learn:</h2>
                             <div class="mt-2 bg-gray-50 p-4 rounded-md border border-gray-200 flex-grow max-h-5xl overflow-y-auto">
                                 <p>{{ answer }}</p>
