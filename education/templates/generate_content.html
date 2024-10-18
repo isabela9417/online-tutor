@@ -45,6 +45,8 @@
 
         .content {
             flex: 1; /* This makes the content area grow to fill available space */
+            /* margin-left: 20px; Adjust this value as needed */
+            /* width: calc(55% - 20px); Adjust width if needed */
         }
 
         footer {
@@ -76,45 +78,62 @@
         </a>
     </div>
 
-    <div class="content flex flex-col flex-grow"> <!-- Added content class for flexibility -->
-        <div class="flex flex-grow">
-            <!-- Sidebar for topic selection -->
-            <div class="w-1/4 p-4 bg-gray-100 border-r border-gray-300"> <!-- Fixed width for sidebar -->
-                <form method="post" action="">
-                    {% csrf_token %}
-                    <label for="topic" class="block text-lg font-medium mb-2">Select a topic:</label>
-                    <select name="topic" id="topic" class="form-select block w-full mb-4">
-                        <option value="">Select</option>
-                        <!-- Topics will be populated here based on the subject -->
-                    </select>
-        
-                    <button type="submit" class="mt-4 px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700">Submit</button>
-                </form>
-            </div>
-            
-            <!-- Main content area -->
-            <div class="flex-grow flex flex-col p-4">
-                <div class="flex-grow flex items-center justify-start">
-                    <div class="bg-gray-300 items-start shadow-lg rounded-lg w-full p-6 h-full">
-                        <div class="mt-4 flex flex-col h-full">
-                            <h2 class="text-xl font-semibold">Read For Me:</h2>
-                            {% if audio_file_url %}
-                            <audio id="audioPlayer" class="mt-2" controls>
-                                <source src="{{ audio_file_url }}" type="audio/mp3">
-                                Your browser does not support the audio tag.
-                            </audio>           
-                            {% endif %}
-                            <h2 class="text-xl font-semibold mt-4">Read the Passage to Learn:</h2>
-                            <div class="mt-2 bg-gray-50 p-4 rounded-md border border-gray-200 flex-grow max-h-5xl overflow-y-auto">
-                                <p>{{ answer }}</p>
-                            </div>
+        <div class="flex flex-wrap justify-center p-4">
+            <div class="flex-grow flex items-start justify-start w-full md:w-1/2 p-2 h-full">
+                <div class="bg-gray-300 items-start shadow-lg rounded-lg w-full p-6 h-full">
+                    <div class="mt-4 flex flex-col h-full">
+                        {% if audio_file_url %}
+                        <audio id="audioPlayer" class="mt-2" controls>
+                            <source src="{{ audio_file_url }}" type="audio/mp3">
+                            Your browser does not support the audio tag.
+                        </audio>           
+                        {% endif %}
+                        <form method="post" action="">
+                            {% csrf_token %}
+                            <label for="topic" class="block text-lg font-medium mb-2">Select a topic:</label>
+                            <select name="topic" id="topic" class="form-select block w-full mb-4">
+                                <option value="">Select</option>
+                                <!-- Topics will be populated here based on the subject -->
+                            </select>
+                            <button type="submit" class="mt-4 px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700">Submit</button>
+                        </form>
+                        <h2 class="text-xl font-semibold mt-4">Read the Passage to Learn:</h2>
+                        <div class="mt-2 bg-gray-50 p-4 rounded-md border border-gray-200 flex-grow max-h-5xl overflow-y-auto">
+                            <p>{{ answer }}</p>
                         </div>
                     </div>
                 </div>
             </div>
+            <script>
+                function toggleMute() {
+                    const audioPlayer = document.getElementById('audioPlayer');
+                    audioPlayer.muted = !audioPlayer.muted;  // Toggle mute state
+                }
+            </script>
+            
+            <div class="flex-grow flex items-start justify-start w-full md:w-1/2 p-2 h-full">
+                <div class="bg-gray-300 items-start shadow-lg rounded-lg w-full p-6 h-full">
+                    <div class="mt-4 flex flex-col h-full"> 
+                        <h2 class="text-xl font-semibold mt-4">Visual Tutorial:</h2>
+                        <div class="mt-2 bg-gray-50 p-4 rounded-md border border-gray-200 flex-grow">
+                            <h3 class="text-lg font-semibold mb-2">Images on {{ topic }}</h3> 
+                            <div class="flex flex-col space-y-4">
+                                {% if image_urls|length == 0 %}
+                                    <h2 class="text-center">No images available.</h2>
+                                {% else %}
+                                    {% for image in image_urls %}
+                                        <div class="relative w-full" style="padding-bottom: 56.25%;">
+                                            <img src="{{ image }}" alt="Image related to {{ selected_topic }}" class="absolute inset-0 w-full h-full object-cover rounded-md" />
+                                        </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                        </div>                                
+                    </div>
+                </div>
+            </div>
+                   
         </div>
-    </div>
-
     <script>
         // Hard-coded topics based on subject ID stored in session
         const topics = {

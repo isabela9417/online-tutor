@@ -24,6 +24,7 @@ from playsound import playsound
 import pyttsx3
 import threading
 import pythoncom
+import requests
 # from openai.error import RateLimitError
 from langchain.docstore.document import Document
 from langchain.document_loaders import TextLoader
@@ -42,8 +43,8 @@ youtube = build('youtube', 'v3', developerKey=settings.YOUTUBE_API_KEY)\
 def home(request):
     return render(request, 'home.html')
 
-def upload_assignment(request):
-    return render(request, 'upload_assignment.html')
+def voice_assistant(request):
+    return render(request, 'voice_assistant.html')
 
 def login_view(request):
     if request.method == 'POST':
@@ -105,21 +106,6 @@ def select_subject(request):
 
     subjects = Subject.objects.filter(grade_id=grade_id)
     return render(request, 'select_subject.html', {'subjects': subjects})
-
-
-@login_required
-def generate_quiz(request):
-    question_id = request.session.get('question_id')
-    question = Question.objects.get(id=question_id)
-    quizzes = Quiz.objects.filter(question=question)
-    if request.method == 'POST':
-        selected_answer = request.POST['answer']
-        correct_answer = quizzes.get(answer=selected_answer)
-        user_performance, created = Performance.objects.get_or_create(user=request.user)
-        user_performance.score = (user_performance.score if created else user_performance.score + (1 if correct_answer else 0))
-        user_performance.save()
-        return redirect('rate_performance')
-    return render(request, 'generate_quiz.html', {'quizzes': quizzes})
 
 @login_required
 def rate_performance(request):
@@ -206,22 +192,18 @@ def read_text(file_path):
 # Assuming you have some client for chat completions
 # from your_chat_client import client  # Adjust this import according to your project
 
-def speak_text(text, filename):
+def speak_text(text):
     """Function to read text aloud and save it as an audio file using pyttsx3."""
     pythoncom.CoInitialize()  # Initialize COM
     engine = pyttsx3.init()
-    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'audio', filename)
-
+    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'audio', 'output.mp3')
+    
     # Create directory if it doesn't exist
     os.makedirs(os.path.dirname(audio_file_path), exist_ok=True)
 
-    try:
-        engine.save_to_file(text, audio_file_path)
-        engine.runAndWait()
-    except Exception as e:
-        print(f"Error saving audio file: {e}")
-        return None  # Return None if there's an error
-
+    engine.save_to_file(text, audio_file_path)
+    engine.runAndWait()
+    
     return audio_file_path
 
 
@@ -237,9 +219,6 @@ def ask_question(request):
         # Handle document upload
         uploaded_file = request.FILES.get('document')
         question = request.POST.get("question")
-
-        # Generate a unique filename based on the question or document content
-        audio_filename = f"audio_{int(time.time())}.mp3"
 
         # If a document is uploaded
         if uploaded_file:
@@ -259,42 +238,13 @@ def ask_question(request):
             if not document_content or "Error" in document_content:
                 document_content = "No content extracted from the document."
             else:
-                question = document_content
+                question = document_content  # Use the document content as the question
                 video_query = f"{question}"
                 video_url = fetch_youtube_video(video_query)
                 video_url = video_url.replace('watch?v=', 'embed/')
 
-            # Prepare context for the model without restrictions
-            context = (
-                f"You are a helpful assistant. "
-                f"Provide a detailed, step-by-step guide on how to solve the following question or topic: {question}. "
-                f"Include any relevant information."
-            )
-
-            # Generate answer using the model
-            start = time.process_time()
-            try:
-                chat_completion = client.chat.completions.create(
-                    messages=[{"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
-                              {"role": "user", "content": context}],
-                    model="llama3-8b-8192",
-                    temperature=0.5,
-                    max_tokens=1024,
-                    top_p=1,
-                    stop=None,
-                    stream=False,
-                )
-                answer = chat_completion.choices[0].message.content
-            except Exception as e:
-                print(f"Error generating answer: {e}")
-                answer = "Error generating answer."
-            end = time.process_time()
-            print(f"Processing time for document: {end - start} seconds")
-
-            os.remove(file_path)
-
         elif question:
-            # Prepare context for the model without restrictions
+            # Prepare context for the model
             context = (
                 f"You are a helpful assistant. "
                 f"Provide a detailed, step-by-step guide on how to solve the following question or topic: {question}. "
@@ -329,20 +279,192 @@ def ask_question(request):
 
         # Generate audio file for the answer
         if answer:
-            audio_file_path = speak_text(answer, audio_filename)  # Pass unique filename
-            if audio_file_path:
-                audio_file_url = f"{settings.MEDIA_URL}audio/{audio_filename}"  # Use the unique filename
+            audio_file_url = speak_text(answer)
+
+        # Store the original question in the session
+        if question:
+            request.session['last_question'] = question  # Store original question
+
+            # Generate quiz questions based on the original question
+            difficulty_level = "easy"  # Set your desired difficulty level
+            num_questions = 5  # Define the number of questions to generate
+            questions, key_answers, options = generate_mcq_questions_from_question(question, difficulty_level, num_questions)
+
+            # Store in session
+            request.session['questions'] = questions
+            request.session['key_answers'] = key_answers
+            request.session['options'] = options
 
     return render(request, 'ask_question.html', {
         'document_content': document_content,
         'question': question,
         'answer': answer,
         'video_url': video_url,
-        'audio_file_url': audio_file_url,  # Correctly reference the audio file
-        'MEDIA_URL': settings.MEDIA_URL,  # Add MEDIA_URL to the context
+        'audio_file_url': f"{settings.MEDIA_URL}audio/output.mp3",
+        'MEDIA_URL': settings.MEDIA_URL,
     })
 
 
+
+def generate_answer(context):
+    start = time.process_time()
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
+                {"role": "user", "content": context}
+            ],
+            model="llama3-8b-8192",
+            temperature=0.5,
+            max_tokens=1024,
+            top_p=1,
+            stop=None,
+            stream=False,
+        )
+        answer = chat_completion.choices[0].message.content
+    except Exception as e:
+        print(f"Error generating answer: {e}")
+        answer = "Error generating answer."
+    end = time.process_time()
+    print(f"Processing time for generation: {end - start} seconds")
+    return answer
+
+import random
+
+def generate_related_questions(original_question):
+    keywords = extract_keywords(original_question)
+
+    if not keywords:
+        return ["No related questions can be generated due to lack of keywords."]
+
+    related_questions = []
+    
+    question_templates = [
+        "What is the significance of {}?",
+        "How is {} used in real-world applications?",
+        "What are the benefits of understanding {}?",
+        "Can you provide examples of {}?",
+        "What challenges are associated with {}?",
+        "How does {} compare to similar concepts?",
+        "What future developments might impact our understanding of {}?"
+    ]
+
+    for keyword in keywords:
+        # Generate questions only for valid keywords
+        if keyword.lower() not in ['and', 'or', 'the', 'of', 'to', 'a']:
+            for template in question_templates:
+                related_questions.append(template.format(keyword))
+
+    random.shuffle(related_questions)  # Shuffle to randomize the order
+    return related_questions[:5]  # Return a limited number of unique questions
+
+def extract_keywords(question):
+    words = question.split()
+    # Simple keyword extraction; can be improved with NLP techniques
+    keywords = [word for word in words if len(word) > 3 and word.isalpha()]  # Filter by word length and ensure they are words
+    return list(set(keywords))  # Remove duplicates
+
+# Example usage
+original_question = "What is the significance of photosynthesis?"
+related_questions = generate_related_questions(original_question)
+for q in related_questions:
+    print(q)
+
+def generate_mcq_questions_from_question(original_question, difficulty_level, num_questions):
+    questions = []
+    key_answers = []
+    options_list = []
+
+    related_questions = generate_related_questions(original_question)
+
+    if len(related_questions) < 4:
+        return [], [], []
+
+    for _ in range(num_questions):
+        correct_answer = random.choice(related_questions)
+
+        # Create a dynamic question based on the related question
+        question = generate_related_questions(correct_answer)
+
+        # Generate plausible but incorrect answers (distractors)
+        incorrect_answers = generate_incorrect_answers(related_questions, correct_answer)
+
+        # Shuffle the options
+        options = [correct_answer] + incorrect_answers
+        random.shuffle(options)
+
+        questions.append(question)
+        key_answers.append(correct_answer)
+        options_list.append(options)
+
+    return questions, key_answers, options_list
+
+def generate_incorrect_answers(all_concepts, correct_answer):
+    potential_distractors = [concept for concept in all_concepts if concept != correct_answer]
+    if len(potential_distractors) < 3:
+        return potential_distractors  # Not enough for distractors
+    incorrect_answers = random.sample(potential_distractors, 3)
+    return incorrect_answers
+
+def quiz(request):
+    questions = request.session.get('questions', [])
+    options = request.session.get('options', [])
+    key_answers = request.session.get('key_answers', [])
+
+    prepared_questions = list(zip(questions, options))
+
+    if 'attempted_questions' not in request.session:
+        request.session['attempted_questions'] = [False] * len(prepared_questions)
+
+    if request.method == "POST":
+        user_answers = []
+        for i in range(len(prepared_questions)):
+            user_answer = request.POST.get(f'question_{i+1}')
+            user_answers.append(user_answer)
+            request.session['attempted_questions'][i] = user_answer is not None
+
+        request.session['user_answers'] = user_answers
+        request.session['submitted'] = True
+
+        return redirect('results')
+
+    return render(request, 'generate_quiz.html', {
+        'questions': prepared_questions,
+    })
+
+def results(request):
+    user_answers = request.session.get('user_answers', [])
+    key_answers = request.session.get('key_answers', [])
+    attempted_questions = request.session.get('attempted_questions', [])
+    questions = request.session.get('questions', [])
+
+    if not user_answers or not key_answers or not questions:
+        print("One of the lists is empty: ", user_answers, key_answers, questions)
+
+    score = sum(1 for i in range(len(user_answers)) if user_answers[i] == key_answers[i] and attempted_questions[i])
+    total_questions = len(attempted_questions)
+
+    results = []
+    for i in range(len(user_answers)):
+        results.append((questions[i], user_answers[i], key_answers[i]))
+
+    context = {
+        'score': score,
+        'total_questions': total_questions,
+        'results': results,
+    }
+
+    # Clear only quiz-related session data
+    request.session['questions'] = []
+    request.session['options'] = []
+    request.session['attempted_questions'] = []
+    request.session['user_answers'] = []
+    request.session['submitted'] = False
+    request.session['key_answers'] = []
+
+    return render(request, 'submit_quiz.html', context)
+
+# content page functions 
 
 @login_required
 def generate_content(request):
@@ -350,26 +472,24 @@ def generate_content(request):
     selected_level = request.session.get('selected_level', 'Unknown Level')
     grade_name = request.session.get('grade_name', 'Unknown Grade')
     subject_name = request.session.get('subject_name', 'Unknown Subject')
-
+    
     grade_id = request.session.get('grade_id', 'Unknown Grade')
     subject_id = request.session.get('subject_id', 'Unknown Subject')
 
     answer = ""
     video_url = ""
-    audio_file_url = ""
+    topic = ""
+    image_urls = []
 
     if request.method == "POST":
-        selected_topic = request.POST.get("topic")
+        topic = request.POST.get("topic")  # Use topic from the form
 
-        # Generate a unique filename for the audio
-        audio_filename = f"audio_{int(time.time())}.mp3"
-
-        if selected_topic:
+        if topic:
             context = (
                 f"You are an assistant for a school system. "
                 f"The current school level is '{selected_level}', "
                 f"the grade is '{grade_id}', and the subject is '{subject_id}'. "
-                f"Elaborate on the topic: {selected_topic}. "
+                f"Elaborate on the topic: {topic}. "
                 f"You can include any relevant information."
             )
             
@@ -390,24 +510,20 @@ def generate_content(request):
             end = time.process_time()
             print(f"Processing time: {end - start} seconds")
 
-            # Generate audio for the answer
-            audio_file_path = speak_text(answer, audio_filename)  # Pass unique filename
-            if audio_file_path:
-                audio_file_url = f"{settings.MEDIA_URL}audio/{audio_filename}"  # Use the unique filename
+            # Fetch images based on the topic
+            image_urls = fetch_images_from_serper(topic)  # Use topic instead of selected_topic
+
+            # Store the answer in the session for later use
+            request.session['generated_answer'] = answer
 
             # Fetch the video URL based on the topic
-            video_query = selected_topic
+            video_query = topic  # Use topic for video fetching
             video_url = fetch_youtube_video(video_query)
             video_url = video_url.replace('watch?v=', 'embed/')
         else:
             answer = "No topic was submitted."
     
-    return render(request, 'generate_content.html', {
-        'answer': answer,
-        'video_url': video_url,
-        'audio_file_url': audio_file_url,  # Pass the audio file URL to the template
-    })
-
+    return render(request, 'generate_content.html', {'answer': answer, 'video_url': video_url, 'topic': topic, 'image_urls': image_urls})
 
 def is_valid_answer(answer, selected_level, grade_name, subject_name):
     if selected_level in answer and grade_name in answer and subject_name in answer:
@@ -430,20 +546,51 @@ def is_valid_answer(answer, selected_level, grade_id, subject_id):
 
     return False
 
+# Define a mapping of subjects to potential keywords
+SUBJECT_KEYWORDS = {
+    "Mathematics": ["fractions", "geometry", "algebra", "addition", "subtraction", "shapes", "Count to 100", "number line", "Write the date", "time", "Identify", "sort","classify"],
+    "English": ["grammar", "nouns", "verbs", "adjectives", "sentences", "punctuation", "Phonics & Spelling", "Handwriting and Writing"],
+    "Science": ["biology", "chemistry", "physics", "experiments"],
+    "History": ["ancient", "medieval", "modern", "events"],
+    
+}
 
-def generate_questions(document_text):
-    response = requests.post(
-        'https://api.groq.com/generate-questions',
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer client',
-        },
-        json={'text': document_text}
-    )
-    try:
-        questions = generate_questions(document_text)
-    except Exception as e:
-        print(f"Error generating questions: {e}")
+def extract_keywords_for_image_query(answer, subject):
+    # Remove special characters and split the answer into words
+    words = re.findall(r'\b\w+\b', answer.lower())
+    
+    # Create a frequency count of words
+    word_counts = Counter(words)
+    
+    # Get relevant keywords based on the subject
+    relevant_keywords = SUBJECT_KEYWORDS.get(subject, [])
+    
+    # Find relevant keywords in the answer
+    keywords = [word for word in relevant_keywords if word in word_counts]
+    
+    # Formulate a query string
+    return " and ".join(keywords) if keywords else "education"
 
-    return response.json().get('questions', [])
+def fetch_images_from_serper(query):
+    api_key = settings.SERPER_API_KEY
+    url = "https://api.serper.dev/search/images"
 
+    params = {
+        "q": query,
+        "gl": "us",
+        "hl": "en",
+        "type": "image"
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    response = requests.get(url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        results = response.json()
+        return [item['link'] for item in results['image_results']]
+    else:
+        print("Error fetching images:", response.text)
+        return []

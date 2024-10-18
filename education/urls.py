@@ -10,9 +10,11 @@ urlpatterns = [
     path('select_grade/', views.select_grade, name='select_grade'),
     path('select_subject/', views.select_subject, name='select_subject'),
     path('ask_question/', views.ask_question, name='ask_question'),
-    path('generate_quiz/', views.generate_quiz, name='generate_quiz'),
+    path('generate_quiz/', views.quiz, name='generate_quiz'),
     path('rate_performance/', views.rate_performance, name='rate_performance'),
     path('select_school_level/', views.select_school_level, name='select_school_level'),
     path('generate_content/', views.generate_content, name='generate_content'),
-    path('upload_assignment/', views.upload_assignment, name='upload_assignment'),
+    path('voice_assistant/', views.voice_assistant, name='voice_assistant'),
+    path('submit_quiz/', views.results, name='submit_quiz'),
+    
 ]
