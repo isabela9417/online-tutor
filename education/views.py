@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 from django.http import HttpResponse
 from groq import Groq
 import os
+import re
 from dotenv import load_dotenv 
 from django.conf import settings
 import time
@@ -35,10 +36,13 @@ from openai import OpenAIError
 from langchain.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
+from collections import Counter
 
 client = Groq(api_key=settings.GROQ_API_KEY)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-youtube = build('youtube', 'v3', developerKey=settings.YOUTUBE_API_KEY)\
+youtube = build('youtube', 'v3', developerKey=settings.YOUTUBE_API_KEY)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+SEARCH_ENGINE_ID = settings.SEARCH_ENGINE_ID
 
 def home(request):
     return render(request, 'home.html')
@@ -304,8 +308,6 @@ def ask_question(request):
         'MEDIA_URL': settings.MEDIA_URL,
     })
 
-
-
 def generate_answer(context):
     start = time.process_time()
     try:
@@ -470,9 +472,6 @@ def results(request):
 def generate_content(request):
     # Fetch values from the session
     selected_level = request.session.get('selected_level', 'Unknown Level')
-    grade_name = request.session.get('grade_name', 'Unknown Grade')
-    subject_name = request.session.get('subject_name', 'Unknown Subject')
-    
     grade_id = request.session.get('grade_id', 'Unknown Grade')
     subject_id = request.session.get('subject_id', 'Unknown Subject')
 
@@ -511,24 +510,34 @@ def generate_content(request):
             print(f"Processing time: {end - start} seconds")
 
             # Fetch images based on the topic
-            image_urls = fetch_images_from_serper(topic)  # Use topic instead of selected_topic
+            image_urls = fetch_images_from_pexels(topic)  # Use topic here
 
-            # Store the answer in the session for later use
-            request.session['generated_answer'] = answer
+            # # Fetch images using the google_search function
+            # image_urls = google_search(
+            #     api_key=os.getenv("GOOGLE_API_KEY"),
+            #     search_engine_id=os.getenv("SEARCH_ENGINE_ID"),
+            #     topic=topic  # Pass the topic here
+            # )
 
             # Fetch the video URL based on the topic
-            video_query = topic  # Use topic for video fetching
-            video_url = fetch_youtube_video(video_query)
+            video_url = fetch_youtube_video(topic)
             video_url = video_url.replace('watch?v=', 'embed/')
         else:
             answer = "No topic was submitted."
     
-    return render(request, 'generate_content.html', {'answer': answer, 'video_url': video_url, 'topic': topic, 'image_urls': image_urls})
+    return render(request, 'generate_content.html', {
+        'answer': answer,
+        'video_url': video_url,
+        'topic': topic,
+        'image_urls': image_urls
+    })
 
-def is_valid_answer(answer, selected_level, grade_name, subject_name):
-    if selected_level in answer and grade_name in answer and subject_name in answer:
-        return True
-    return False
+
+
+    def is_valid_answer(answer, selected_level, grade_name, subject_name):
+        if selected_level in answer and grade_name in answer and subject_name in answer:
+            return True
+        return False
 
 
 def is_valid_answer(answer, selected_level, grade_id, subject_id):
@@ -546,51 +555,38 @@ def is_valid_answer(answer, selected_level, grade_id, subject_id):
 
     return False
 
-# Define a mapping of subjects to potential keywords
-SUBJECT_KEYWORDS = {
-    "Mathematics": ["fractions", "geometry", "algebra", "addition", "subtraction", "shapes", "Count to 100", "number line", "Write the date", "time", "Identify", "sort","classify"],
-    "English": ["grammar", "nouns", "verbs", "adjectives", "sentences", "punctuation", "Phonics & Spelling", "Handwriting and Writing"],
-    "Science": ["biology", "chemistry", "physics", "experiments"],
-    "History": ["ancient", "medieval", "modern", "events"],
-    
-}
+# def google_search(api_key, search_engine_id, topic, **params):
+#     base_url = 'https://www.googleapis.com/customsearch/v1'
+#     params = {
+#         'key': api_key,
+#         'cx': search_engine_id,
+#         'q': topic,  # Use the topic here
+#         'searchType': 'image',  # Specify that we want image search
+#         'num': 5,  # Limit to 5 results
+#         **params  # Include any additional parameters passed
+#     }
 
-def extract_keywords_for_image_query(answer, subject):
-    # Remove special characters and split the answer into words
-    words = re.findall(r'\b\w+\b', answer.lower())
-    
-    # Create a frequency count of words
-    word_counts = Counter(words)
-    
-    # Get relevant keywords based on the subject
-    relevant_keywords = SUBJECT_KEYWORDS.get(subject, [])
-    
-    # Find relevant keywords in the answer
-    keywords = [word for word in relevant_keywords if word in word_counts]
-    
-    # Formulate a query string
-    return " and ".join(keywords) if keywords else "education"
-
-def fetch_images_from_serper(query):
-    api_key = settings.SERPER_API_KEY
-    url = "https://api.serper.dev/search/images"
-
-    params = {
-        "q": query,
-        "gl": "us",
-        "hl": "en",
-        "type": "image"
-    }
+#     response = requests.get(base_url, params=params)
+#     if response.status_code == 200:
+#         results = response.json().get('items', [])
+#         image_urls = [item['link'] for item in results]
+#         return image_urls
+#     else:
+#         print("Error fetching images:", response.status_code)
+#         return []
+def fetch_images_from_pexels(topic):
+    PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # Ensure this environment variable is set
+    url = f"https://api.pexels.com/v1/search?query={topic}&per_page=10"
 
     headers = {
-        "Authorization": f"Bearer {api_key}"
+        "Authorization": PEXELS_API_KEY  # Use the API key here
     }
 
-    response = requests.get(url, headers=headers, params=params)
-
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
-        results = response.json()
-        return [item['link'] for item in results['image_results']]
+        results = response.json().get('photos', [])
+        image_urls = [photo['src']['medium'] for photo in results[:5]]  # You can change 'medium' to 'large'
+        return image_urls
     else:
-        print("Error fetching images:", response.text)
+        print("Error fetching images:", response.status_code)
         return []

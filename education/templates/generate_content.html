@@ -123,35 +123,56 @@
                                 {% else %}
                                     {% for image in image_urls %}
                                         <div class="relative w-full" style="padding-bottom: 56.25%;">
-                                            <img src="{{ image }}" alt="Image related to {{ selected_topic }}" class="absolute inset-0 w-full h-full object-cover rounded-md" />
+                                            <img src="{{ image }}" alt="Image related to {{ topic }}" class="absolute inset-0 w-full h-full object-cover rounded-md" />
                                         </div>
                                     {% endfor %}
                                 {% endif %}
+                                <h3 class="text-lg font-semibold mb-2">Images on {{ topic }}</h3> 
+                                <p>Debug: {{ image_urls }}</p>
                             </div>
                         </div>                                
                     </div>
                 </div>
             </div>
+            
                    
         </div>
     <script>
         // Hard-coded topics based on subject ID stored in session
         const topics = {
             '1': [ // Subject ID 1
+                { id: 'Vowels', name: 'Vowels' },
                 { id: 'nouns', name: 'Nouns' },
                 { id: 'verbs', name: 'Verbs' },
                 { id: 'grammar', name: 'Grammar' },
-                { id: 'punctuation', name: 'Punctuation' },
+                { id: 'punctuation', name: 'Punctuation marks' },
                 { id: 'Phonics & Spelling', name: 'Phonics & Spelling' },
-                { id: 'Handwriting and Writing', name: 'Handwriting and Writing' },
+                { id: 'Alphabets', name: 'Alphabets' },
+                { id: 'pronounciation', name: 'pronounciation' },
+                { id: 'Plural nouns', name: 'Plural nouns' },
+                { id: 'sentence stucture', name: 'sentence stucture' },
+                { id: 'Synonyms and Antonyms', name: 'Synonyms and Antonyms' },
+                { id: 'Adjectives', name: 'Learn Adjectives' },
+                
+                
             ],
             '2': [ // Subject ID 2
                 { id: 'shapes', name: 'Using Shapes' },
-                { id: 'Count to 100', name: 'Count to 100' },
-                { id: 'Add and subtract 2-digit numbers', name: 'Add and subtract 2-digit numbers' },
-                { id: 'Represent numbers on a number line', name: 'Represent numbers on a number line' },
+                { id: 'colors', name: 'learn colors' },
+                { id: 'Count to 1-10', name: 'Count to 1-10' },
+                { id: 'Count to 1-20', name: 'Count to 1-20' },
+                { id: 'Count to 1-30', name: 'Count to 1-30' },
+                { id: 'Addition', name: 'addition of numbers from 1 to 5' },
+                { id: 'Addition', name: 'addition of numbers from 5 to 20' },
+                { id: 'Addition', name: 'addition of numbers from 21 to 50' },
+                { id: 'Subtraction', name: 'subtraction of numbers from 1 to 5' },
+                { id: 'Subtraction', name: 'subtraction of numbers from 5 to 20' },
+                { id: 'Subtraction', name: 'subtraction of numbers from 21 to 50' },
+                { id: 'Multiplication', name: 'Multiplication' },
+                { id: 'Division', name: 'Division' },
+                { id: 'number line', name: 'how to use a number line' },
                 { id: 'Write the date; tell time; read a calendar', name: 'Write the date; tell time; read a calendar' },
-                { id: 'Identify, sort and classify 2-dimensional shapes', name: 'Identify, sort and classify 2-dimensional shapes' },
+                { id: '2-dimensional shapes', name: '2-dimensional shapes' },
             ],
             '4': [ // Subject ID 4
                 { id: 'Homophones', name: 'Homophones' },
