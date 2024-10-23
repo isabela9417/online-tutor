@@ -467,6 +467,10 @@ def results(request):
     return render(request, 'submit_quiz.html', context)
 
 # content page functions 
+import requests
+import time
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
 
 @login_required
 def generate_content(request):
@@ -494,10 +498,8 @@ def generate_content(request):
             
             start = time.process_time()
             chat_completion = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
-                    {"role": "user", "content": context}
-                ],
+                messages=[{"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
+                          {"role": "user", "content": context}],
                 model="llama3-8b-8192",
                 temperature=0.5,
                 max_tokens=1024,
@@ -509,19 +511,13 @@ def generate_content(request):
             end = time.process_time()
             print(f"Processing time: {end - start} seconds")
 
-            # Fetch images based on the topic
-            image_urls = fetch_images_from_pexels(topic)  # Use topic here
-
-            # # Fetch images using the google_search function
-            # image_urls = google_search(
-            #     api_key=os.getenv("GOOGLE_API_KEY"),
-            #     search_engine_id=os.getenv("SEARCH_ENGINE_ID"),
-            #     topic=topic  # Pass the topic here
-            # )
-
             # Fetch the video URL based on the topic
             video_url = fetch_youtube_video(topic)
             video_url = video_url.replace('watch?v=', 'embed/')
+            
+            # Fetch image URLs based on the topic
+            image_urls = google_image_search(GOOGLE_API_KEY, SEARCH_ENGINE_ID, topic)
+
         else:
             answer = "No topic was submitted."
     
@@ -532,6 +528,24 @@ def generate_content(request):
         'image_urls': image_urls
     })
 
+def google_image_search(api_key, cse_id, query, num_results=2):
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        'key': api_key,
+        'cx': cse_id,
+        'q': query,
+        'searchType': 'image',
+        'num': num_results
+    }
+    
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        results = response.json()
+        image_urls = [item['link'] for item in results.get('items', [])]
+        return image_urls
+    else:
+        print("Error:", response.status_code, response.text)
+        return []
 
 
     def is_valid_answer(answer, selected_level, grade_name, subject_name):
@@ -555,38 +569,19 @@ def is_valid_answer(answer, selected_level, grade_id, subject_id):
 
     return False
 
-# def google_search(api_key, search_engine_id, topic, **params):
-#     base_url = 'https://www.googleapis.com/customsearch/v1'
-#     params = {
-#         'key': api_key,
-#         'cx': search_engine_id,
-#         'q': topic,  # Use the topic here
-#         'searchType': 'image',  # Specify that we want image search
-#         'num': 5,  # Limit to 5 results
-#         **params  # Include any additional parameters passed
+# def fetch_images_from_pexels(topic):
+#     PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # Ensure this environment variable is set
+#     url = f"https://api.pexels.com/v1/search?query={topic}&per_page=10"
+
+#     headers = {
+#         "Authorization": PEXELS_API_KEY  # Use the API key here
 #     }
 
-#     response = requests.get(base_url, params=params)
+#     response = requests.get(url, headers=headers)
 #     if response.status_code == 200:
-#         results = response.json().get('items', [])
-#         image_urls = [item['link'] for item in results]
+#         results = response.json().get('photos', [])
+#         image_urls = [photo['src']['medium'] for photo in results[:5]]  # You can change 'medium' to 'large'
 #         return image_urls
 #     else:
 #         print("Error fetching images:", response.status_code)
 #         return []
-def fetch_images_from_pexels(topic):
-    PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # Ensure this environment variable is set
-    url = f"https://api.pexels.com/v1/search?query={topic}&per_page=10"
-
-    headers = {
-        "Authorization": PEXELS_API_KEY  # Use the API key here
-    }
-
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        results = response.json().get('photos', [])
-        image_urls = [photo['src']['medium'] for photo in results[:5]]  # You can change 'medium' to 'large'
-        return image_urls
-    else:
-        print("Error fetching images:", response.status_code)
-        return []

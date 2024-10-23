@@ -7,6 +7,7 @@
     <title>Ask Question</title>
     <link href="{% static 'css/styles.css' %}" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/swiper/swiper-bundle.min.js"></script>
 
     <style>
         @keyframes underlineCycle {
@@ -82,6 +83,7 @@
             <div class="flex-grow flex items-start justify-start w-full md:w-1/2 p-2 h-full">
                 <div class="bg-gray-300 items-start shadow-lg rounded-lg w-full p-6 h-full">
                     <div class="mt-4 flex flex-col h-full">
+                        <h2 class="text-xl font-semibold">Read For Me:</h2>
                         {% if audio_file_url %}
                         <audio id="audioPlayer" class="mt-2" controls>
                             <source src="{{ audio_file_url }}" type="audio/mp3">
@@ -123,19 +125,17 @@
                                 {% else %}
                                     {% for image in image_urls %}
                                         <div class="relative w-full" style="padding-bottom: 56.25%;">
+                                            <br><br><br>
                                             <img src="{{ image }}" alt="Image related to {{ topic }}" class="absolute inset-0 w-full h-full object-cover rounded-md" />
                                         </div>
                                     {% endfor %}
                                 {% endif %}
-                                <h3 class="text-lg font-semibold mb-2">Images on {{ topic }}</h3> 
-                                <p>Debug: {{ image_urls }}</p>
+                                <h3 class="text-lg font-semibold mb-2">Slide the images to see another example of {{ topic }}</h3> 
                             </div>
                         </div>                                
                     </div>
                 </div>
-            </div>
-            
-                   
+            </div>  
         </div>
     <script>
         // Hard-coded topics based on subject ID stored in session
