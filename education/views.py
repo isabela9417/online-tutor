@@ -37,7 +37,9 @@ from langchain.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
 from collections import Counter
+import openai
 
+openai.api_key = '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'
 client = Groq(api_key=settings.GROQ_API_KEY)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 youtube = build('youtube', 'v3', developerKey=settings.YOUTUBE_API_KEY)
@@ -220,59 +222,47 @@ def ask_question(request):
     audio_file_url = ""
 
     if request.method == 'POST':
-        # Handle document upload
         uploaded_file = request.FILES.get('document')
         question = request.POST.get("question")
+        audio_filename = f"audio_{int(time.time())}.mp3"
 
-        # If a document is uploaded
         if uploaded_file:
             documents_dir = os.path.join(settings.MEDIA_ROOT, 'documents')
             os.makedirs(documents_dir, exist_ok=True)
             file_path = os.path.join(documents_dir, uploaded_file.name)
 
-            # Save the file
             with open(file_path, 'wb+') as destination:
                 for chunk in uploaded_file.chunks():
                     destination.write(chunk)
 
-            # Read the document based on file type
             document_content = read_document(file_path, uploaded_file.name)
             print("Extracted Document Content:", document_content)
 
             if not document_content or "Error" in document_content:
                 document_content = "No content extracted from the document."
             else:
-                question = document_content  # Use the document content as the question
+                question = document_content
                 video_query = f"{question}"
                 video_url = fetch_youtube_video(video_query)
                 video_url = video_url.replace('watch?v=', 'embed/')
 
-        elif question:
-            # Prepare context for the model
             context = (
                 f"You are a helpful assistant. "
                 f"Provide a detailed, step-by-step guide on how to solve the following question or topic: {question}. "
                 f"Include any relevant information."
             )
 
-            start = time.process_time()
-            try:
-                chat_completion = client.chat.completions.create(
-                    messages=[{"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
-                              {"role": "user", "content": context}],
-                    model="llama3-8b-8192",
-                    temperature=0.5,
-                    max_tokens=1024,
-                    top_p=1,
-                    stop=None,
-                    stream=False,
-                )
-                answer = chat_completion.choices[0].message.content
-            except Exception as e:
-                print(f"Error generating answer: {e}")
-                answer = "Error generating answer."
-            end = time.process_time()
-            print(f"Processing time for question: {end - start} seconds")
+            answer = generate_answer(context)
+            os.remove(file_path)
+
+        elif question:
+            context = (
+                f"You are a helpful assistant. "
+                f"Provide a detailed, step-by-step guide on how to solve the following question or topic: {question}. "
+                f"Include any relevant information."
+            )
+
+            answer = generate_answer(context)
 
             video_query = f"{question}"
             video_url = fetch_youtube_video(video_query)
@@ -283,28 +273,29 @@ def ask_question(request):
 
         # Generate audio file for the answer
         if answer:
-            audio_file_url = speak_text(answer)
+            audio_file_path = speak_text(answer)
+            if audio_file_path:
+                audio_file_url = f"{settings.MEDIA_URL}audio/{audio_filename}"
 
-        # Store the original question in the session
-        if question:
-            request.session['last_question'] = question  # Store original question
+        # Generate quiz questions based on the question content
+        if question:  # Ensure that question is used to generate new questions
+            result = generate_questions(question)  # Use question as topic
 
-            # Generate quiz questions based on the original question
-            difficulty_level = "easy"  # Set your desired difficulty level
-            num_questions = 5  # Define the number of questions to generate
-            questions, key_answers, options = generate_mcq_questions_from_question(question, difficulty_level, num_questions)
+            if result:  # Check if result is not empty
+                questions = result  # Assuming result is a list of question dictionaries
+                request.session['questions'] = questions
+                request.session['attempted_questions'] = [False] * len(questions)
+                request.session['user_answers'] = [None] * len(questions)
+            else:
+                print("No questions generated for the provided topic.")
 
-            # Store in session
-            request.session['questions'] = questions
-            request.session['key_answers'] = key_answers
-            request.session['options'] = options
 
     return render(request, 'ask_question.html', {
         'document_content': document_content,
         'question': question,
         'answer': answer,
         'video_url': video_url,
-        'audio_file_url': f"{settings.MEDIA_URL}audio/output.mp3",
+        'audio_file_url': audio_file_url,
         'MEDIA_URL': settings.MEDIA_URL,
     })
 
@@ -333,144 +324,96 @@ def generate_answer(context):
 
 import random
 
-def generate_related_questions(original_question):
-    keywords = extract_keywords(original_question)
+def generate_quiz(request):
+    questions_data = request.session.get('questions', [])
 
-    if not keywords:
-        return ["No related questions can be generated due to lack of keywords."]
-
-    related_questions = []
-    
-    question_templates = [
-        "What is the significance of {}?",
-        "How is {} used in real-world applications?",
-        "What are the benefits of understanding {}?",
-        "Can you provide examples of {}?",
-        "What challenges are associated with {}?",
-        "How does {} compare to similar concepts?",
-        "What future developments might impact our understanding of {}?"
-    ]
-
-    for keyword in keywords:
-        # Generate questions only for valid keywords
-        if keyword.lower() not in ['and', 'or', 'the', 'of', 'to', 'a']:
-            for template in question_templates:
-                related_questions.append(template.format(keyword))
-
-    random.shuffle(related_questions)  # Shuffle to randomize the order
-    return related_questions[:5]  # Return a limited number of unique questions
-
-def extract_keywords(question):
-    words = question.split()
-    # Simple keyword extraction; can be improved with NLP techniques
-    keywords = [word for word in words if len(word) > 3 and word.isalpha()]  # Filter by word length and ensure they are words
-    return list(set(keywords))  # Remove duplicates
-
-# Example usage
-original_question = "What is the significance of photosynthesis?"
-related_questions = generate_related_questions(original_question)
-for q in related_questions:
-    print(q)
-
-def generate_mcq_questions_from_question(original_question, difficulty_level, num_questions):
     questions = []
-    key_answers = []
-    options_list = []
+    for q in questions_data:
+        # Ensure q is a dictionary
+        if isinstance(q, dict):
+            question_text = q.get('question_text', 'No question text available')
+            choices = q.get('choices', [])
+            questions.append({'question_text': question_text, 'choices': choices})
 
-    related_questions = generate_related_questions(original_question)
+    # Debug: Print questions to see what is being passed to the template
+    print("Questions being passed to quiz page:", questions)
 
-    if len(related_questions) < 4:
-        return [], [], []
+    return render(request, 'quiz.html', {'questions': questions})
 
-    for _ in range(num_questions):
-        correct_answer = random.choice(related_questions)
+def generate_questions(topic):
+    try:
+        # Call OpenAI API to generate questions and multiple choice answers
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{
+                "role": "user",
+                "content": f"Generate 10 quiz questions about {topic}, with four answer options (A, B, C, D), and indicate the correct answer."
+            }]
+        )
 
-        # Create a dynamic question based on the related question
-        question = generate_related_questions(correct_answer)
+        # Debug: Log the API response
+        print("API Response:", response)
 
-        # Generate plausible but incorrect answers (distractors)
-        incorrect_answers = generate_incorrect_answers(related_questions, correct_answer)
+        # Process response to create questions
+        questions_text = response['choices'][0]['message']['content'].strip()
+        questions_data = questions_text.split('\n\n')  # Split by double newlines to separate questions
 
-        # Shuffle the options
-        options = [correct_answer] + incorrect_answers
-        random.shuffle(options)
+        questions = []
+        for data in questions_data:
+            if data.strip():
+                # Split question text and answer options
+                parts = data.split('\n')
+                if len(parts) < 6:
+                    continue  # Skip this entry if it doesn't have enough parts
+                
+                question_text = parts[0].strip()
+                options = [parts[i].strip() for i in range(1, 5)]  # Next four lines are options
+                correct_answer = parts[5].split(' ')[0]  # Extracting the answer option (e.g., 'B)')
 
-        questions.append(question)
-        key_answers.append(correct_answer)
-        options_list.append(options)
+                questions.append({
+                    'question_text': question_text,
+                    'choices': options,
+                    'answer': correct_answer
+                })
 
-    return questions, key_answers, options_list
+        # Debug: Log the generated questions
+        print("Generated Questions:", questions)
+        
+        return questions
 
-def generate_incorrect_answers(all_concepts, correct_answer):
-    potential_distractors = [concept for concept in all_concepts if concept != correct_answer]
-    if len(potential_distractors) < 3:
-        return potential_distractors  # Not enough for distractors
-    incorrect_answers = random.sample(potential_distractors, 3)
-    return incorrect_answers
-
-def quiz(request):
+    except Exception as e:
+        print("Error during question generation:", e)
+        return []
+    
+def submit_quiz(request):
     questions = request.session.get('questions', [])
-    options = request.session.get('options', [])
-    key_answers = request.session.get('key_answers', [])
+    score = 0
+    total_questions = len(questions)
 
-    prepared_questions = list(zip(questions, options))
+    if request.method == 'POST':
+        for idx, question in enumerate(questions):
+            user_answer = request.POST.get(f'question_{idx}')
+            # Check if the user's answer matches the correct answer
+            if user_answer == question['answer']:  # Make sure 'answer' is stored in the question data
+                score += 1
+        
+        # Determine the pass/fail status
+        pass_threshold = total_questions / 2  # Example: passing is getting more than half correct
+        passed = score > pass_threshold
 
-    if 'attempted_questions' not in request.session:
-        request.session['attempted_questions'] = [False] * len(prepared_questions)
+        # Render results after the quiz is submitted
+        return redirect('results', score=score, total=total_questions, passed=passed)  # Pass parameters correctly
 
-    if request.method == "POST":
-        user_answers = []
-        for i in range(len(prepared_questions)):
-            user_answer = request.POST.get(f'question_{i+1}')
-            user_answers.append(user_answer)
-            request.session['attempted_questions'][i] = user_answer is not None
+    return redirect('generate_quiz')  # Redirect back to the quiz if something goes wrong
 
-        request.session['user_answers'] = user_answers
-        request.session['submitted'] = True
-
-        return redirect('results')
-
-    return render(request, 'generate_quiz.html', {
-        'questions': prepared_questions,
-    })
-
-def results(request):
-    user_answers = request.session.get('user_answers', [])
-    key_answers = request.session.get('key_answers', [])
-    attempted_questions = request.session.get('attempted_questions', [])
-    questions = request.session.get('questions', [])
-
-    if not user_answers or not key_answers or not questions:
-        print("One of the lists is empty: ", user_answers, key_answers, questions)
-
-    score = sum(1 for i in range(len(user_answers)) if user_answers[i] == key_answers[i] and attempted_questions[i])
-    total_questions = len(attempted_questions)
-
-    results = []
-    for i in range(len(user_answers)):
-        results.append((questions[i], user_answers[i], key_answers[i]))
-
-    context = {
+def results(request, score, total, passed):
+    passed = passed == 'True'  # Convert passed back to boolean if necessary
+    
+    return render(request, 'results.html', {
         'score': score,
-        'total_questions': total_questions,
-        'results': results,
-    }
-
-    # Clear only quiz-related session data
-    request.session['questions'] = []
-    request.session['options'] = []
-    request.session['attempted_questions'] = []
-    request.session['user_answers'] = []
-    request.session['submitted'] = False
-    request.session['key_answers'] = []
-
-    return render(request, 'submit_quiz.html', context)
-
-# content page functions 
-import requests
-import time
-from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
+        'total': total,
+        'passed': passed,
+    })
 
 @login_required
 def generate_content(request):
@@ -568,20 +511,3 @@ def is_valid_answer(answer, selected_level, grade_id, subject_id):
         return True
 
     return False
-
-# def fetch_images_from_pexels(topic):
-#     PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # Ensure this environment variable is set
-#     url = f"https://api.pexels.com/v1/search?query={topic}&per_page=10"
-
-#     headers = {
-#         "Authorization": PEXELS_API_KEY  # Use the API key here
-#     }
-
-#     response = requests.get(url, headers=headers)
-#     if response.status_code == 200:
-#         results = response.json().get('photos', [])
-#         image_urls = [photo['src']['medium'] for photo in results[:5]]  # You can change 'medium' to 'large'
-#         return image_urls
-#     else:
-#         print("Error fetching images:", response.status_code)
-#         return []

@@ -25,14 +25,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # API key to get images based on topic selected
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
-# API key to get images based on topic selected
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SEARCH_ENGINE_ID = os.getenv('SEARCH_ENGINE_ID')
-
+# API key to get images based on topic selected
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
