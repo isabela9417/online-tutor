@@ -88,7 +88,7 @@
         <div class="flex-grow flex items-center justify-center p-4">
             <div class="bg-white shadow-lg rounded-lg w-full max-w-2xl p-6">
                 <h1>Quiz</h1>
-                <form method="post" action="{% url 'submit_quiz' %}">
+                <form method="POST" action="{% url 'submit_quiz' %}">
                     {% csrf_token %}
                     {% for question in questions %}
                     <br>

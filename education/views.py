@@ -324,6 +324,7 @@ def generate_answer(context):
 
 import random
 
+# quiz related functions
 def generate_quiz(request):
     questions_data = request.session.get('questions', [])
 
@@ -356,24 +357,27 @@ def generate_questions(topic):
 
         # Process response to create questions
         questions_text = response['choices'][0]['message']['content'].strip()
-        questions_data = questions_text.split('\n\n')  # Split by double newlines to separate questions
-
+        questions_data = questions_text.split('\n\n') 
         questions = []
+        
         for data in questions_data:
             if data.strip():
                 # Split question text and answer options
                 parts = data.split('\n')
                 if len(parts) < 6:
-                    continue  # Skip this entry if it doesn't have enough parts
-                
+                    continue  # Skip if the format is not correct
+
                 question_text = parts[0].strip()
-                options = [parts[i].strip() for i in range(1, 5)]  # Next four lines are options
-                correct_answer = parts[5].split(' ')[0]  # Extracting the answer option (e.g., 'B)')
+                options = [parts[i].strip() for i in range(1, 5)] 
+                
+                # Extract correct answer from the last line (like "Correct: A")
+                correct_answer_line = parts[5].strip()  # Assuming the correct answer line follows the options
+                correct_answer = correct_answer_line.split(':')[-1].strip()  # Get the part after "Correct: "
 
                 questions.append({
                     'question_text': question_text,
                     'choices': options,
-                    'answer': correct_answer
+                    'answer': correct_answer  # Store the actual correct answer option (e.g., 'A')
                 })
 
         # Debug: Log the generated questions
@@ -384,31 +388,36 @@ def generate_questions(topic):
     except Exception as e:
         print("Error during question generation:", e)
         return []
+
     
 def submit_quiz(request):
     questions = request.session.get('questions', [])
+  
     score = 0
     total_questions = len(questions)
 
     if request.method == 'POST':
         for idx, question in enumerate(questions):
             user_answer = request.POST.get(f'question_{idx}')
+            correct_answer = question.get('answer')
+            
+            print(f"Question {idx}: User Answer: {user_answer}, Correct Answer: {correct_answer}")
+            
             # Check if the user's answer matches the correct answer
-            if user_answer == question['answer']:  # Make sure 'answer' is stored in the question data
+            if user_answer is not None and user_answer.strip() == correct_answer.strip():
                 score += 1
         
         # Determine the pass/fail status
-        pass_threshold = total_questions / 2  # Example: passing is getting more than half correct
+        pass_threshold = total_questions / 2 
         passed = score > pass_threshold
 
         # Render results after the quiz is submitted
-        return redirect('results', score=score, total=total_questions, passed=passed)  # Pass parameters correctly
+        return redirect('results', score=score, total=total_questions, passed=passed) 
+    return redirect('generate_quiz')
 
-    return redirect('generate_quiz')  # Redirect back to the quiz if something goes wrong
 
 def results(request, score, total, passed):
-    passed = passed == 'True'  # Convert passed back to boolean if necessary
-    
+    passed = passed == 'True'
     return render(request, 'results.html', {
         'score': score,
         'total': total,
