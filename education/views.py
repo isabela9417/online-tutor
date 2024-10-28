@@ -422,6 +422,7 @@ def results(request, score, total, passed):
         'score': score,
         'total': total,
         'passed': passed,
+        
     })
 
 @login_required
