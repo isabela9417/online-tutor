@@ -24,20 +24,17 @@ from gtts import gTTS
 from playsound import playsound
 import pyttsx3
 import threading
-import pythoncom
 import requests
-# from openai.error import RateLimitError
-from langchain.docstore.document import Document
-from langchain.document_loaders import TextLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain_openai import OpenAIEmbeddings
-from openai import OpenAIError
-from langchain.vectorstores import FAISS
-from langchain.chains import RetrievalQA
-from langchain.schema import Document
+import pandas as pd
 from collections import Counter
 import openai
+import pyttsx3
+import json
+from django.views import View
+import speech_recognition as sr
+from django.http import JsonResponse
+import pythoncom
+
 
 openai.api_key = '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'
 client = Groq(api_key=settings.GROQ_API_KEY)
@@ -152,7 +149,7 @@ def read_document(file_path, file_name):
     elif file_name.lower().endswith(('.txt')):
         return read_text(file_path)
     elif file_name.lower().endswith(('.csv')):
-        return read_csv(file_path)
+        return pd.read_csv(file_path)
     else:
         return "Unsupported file type."
 
@@ -195,12 +192,11 @@ def read_text(file_path):
         return "Error reading text file."
 
 
-# Assuming you have some client for chat completions
-# from your_chat_client import client  # Adjust this import according to your project
 
+# function that allow text-to-audio 
 def speak_text(text):
     """Function to read text aloud and save it as an audio file using pyttsx3."""
-    pythoncom.CoInitialize()  # Initialize COM
+    pythoncom.CoInitialize() 
     engine = pyttsx3.init()
     audio_file_path = os.path.join(settings.MEDIA_ROOT, 'audio', 'output.mp3')
     
@@ -365,19 +361,19 @@ def generate_questions(topic):
                 # Split question text and answer options
                 parts = data.split('\n')
                 if len(parts) < 6:
-                    continue  # Skip if the format is not correct
+                    continue 
 
                 question_text = parts[0].strip()
                 options = [parts[i].strip() for i in range(1, 5)] 
                 
                 # Extract correct answer from the last line (like "Correct: A")
-                correct_answer_line = parts[5].strip()  # Assuming the correct answer line follows the options
-                correct_answer = correct_answer_line.split(':')[-1].strip()  # Get the part after "Correct: "
+                correct_answer_line = parts[5].strip()  
+                correct_answer = correct_answer_line.split(':')[-1].strip() 
 
                 questions.append({
                     'question_text': question_text,
                     'choices': options,
-                    'answer': correct_answer  # Store the actual correct answer option (e.g., 'A')
+                    'answer': correct_answer 
                 })
 
         # Debug: Log the generated questions
@@ -521,3 +517,97 @@ def is_valid_answer(answer, selected_level, grade_id, subject_id):
         return True
 
     return False
+
+
+
+import logging
+
+# Create a logger
+logger = logging.getLogger(__name__)
+
+class VoiceAssistantView(View):
+    def get(self, request):
+        initial_greeting = "Hello! How can I assist you today?"
+        audio_file_path = self.speak(initial_greeting)
+        return render(request, 'voice_assistant.html', {'greeting': initial_greeting, 'audio_file': audio_file_path})
+
+    def post(self, request):
+        try:
+            # Ensure proper handling of JSON input
+            data = json.loads(request.body)
+            user_query = data.get('question', '').strip()
+
+            if not user_query:
+                return JsonResponse({'error': 'No question provided'}, status=400)
+
+            # Step 1: Get response from Groq API
+            assistant_response = self.get_response(user_query)
+
+            # Step 2: Convert the response to speech
+            audio_file_path = self.speak(assistant_response)
+
+            # Step 3: Return the response text and audio URL to the frontend
+            audio_url = os.path.join(settings.MEDIA_URL, 'audio', 'output.mp3')
+
+            return JsonResponse({'response': assistant_response, 'audio_url': audio_url})
+
+        except Exception as e:
+            # Log the error for debugging
+            
+            print(f"Error processing the request: {str(e)}")
+            return JsonResponse({'error': f"Server error: {str(e)}"}, status=500)
+
+    def get_response(self, context):
+        try:
+            start = time.process_time()
+            
+            # Log the input being sent to Groq
+            print(f"User query sent to Groq API: {context}")
+
+            # Call to the Groq API (replace with your actual API call)
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that provides comprehensive solutions."},
+                    {"role": "user", "content": context}
+                ],
+                model="llama3-8b-8192",  # Replace with your Groq model
+                temperature=0.5,
+                max_tokens=1024,
+                top_p=1,
+                stop=None,
+                stream=False,
+            )
+
+            # Log the response from Groq API
+            print(f"Groq API response: {chat_completion}")
+
+            # Extract the assistant's response from the completion
+            response = chat_completion.choices[0].message.content
+
+            end = time.process_time()
+            print(f"Response generated in {end - start} seconds.")
+            return response
+
+        except Exception as e:
+            # Log error if Groq API call fails
+            
+            print(f"Error getting response from Groq API: {str(e)}")
+            return "Sorry, I couldn't get an answer from my resources."
+
+    def speak(self, text):
+        try:
+            pythoncom.CoInitialize()  # Initialize COM
+            engine = pyttsx3.init()
+
+            # Define the file path to save the audio
+            audio_file_path = os.path.join(settings.MEDIA_ROOT, 'audio', 'output.mp3')
+            os.makedirs(os.path.dirname(audio_file_path), exist_ok=True)
+
+            # Save the speech to the file
+            engine.save_to_file(text, audio_file_path)
+            engine.runAndWait()
+
+            return audio_file_path
+        except Exception as e:
+            print(f"Error during text-to-speech conversion: {str(e)}")
+            return None

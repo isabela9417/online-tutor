@@ -1,4 +1,5 @@
 from django.urls import path
+from .views import VoiceAssistantView
 from . import views
 from django.contrib.auth.views import LogoutView
 
@@ -13,10 +14,11 @@ urlpatterns = [
     path('rate_performance/', views.rate_performance, name='rate_performance'),
     path('select_school_level/', views.select_school_level, name='select_school_level'),
     path('generate_content/', views.generate_content, name='generate_content'),
-    path('voice_assistant/', views.voice_assistant, name='voice_assistant'),
+    path('voice_assistant/', VoiceAssistantView.as_view(), name='voice_assistant'),
     path('quiz/', views.generate_quiz, name='quiz'), 
     path('submit_quiz/', views.submit_quiz, name='submit_quiz'),
     path('results/<int:score>/<int:total>/<str:passed>/', views.results, name='results'),
     path('generate_quiz/', views.generate_quiz, name='generate_quiz'),
+    # path('process_speech/', views.process_speech, name='process_speech'),
     
 ]
